@@ -4,6 +4,7 @@ import { revalidatePath } from 'next/cache'
 import { createServiceClient } from '@/lib/supabase/service'
 import { requireUser } from '@/lib/auth/requireUser'
 import { createNotification } from '@/lib/notifications/create'
+import { n8nWebhookHeaders } from '@/lib/integrations/n8n'
 
 export async function markStepComplete(stepId: string) {
   const session = await requireUser()
@@ -62,7 +63,7 @@ export async function markStepComplete(stepId: string) {
   if (stepWebhookUrl) {
     fetch(stepWebhookUrl, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: n8nWebhookHeaders(),
       body: JSON.stringify({
         event: 'step_completed',
         client_id: client.id,
@@ -128,7 +129,7 @@ export async function markStepComplete(stepId: string) {
     if (process.env.N8N_WEBHOOK_MODULE_COMPLETE) {
       fetch(process.env.N8N_WEBHOOK_MODULE_COMPLETE, {
         method: 'POST',
-        headers: { 'content-type': 'application/json' },
+        headers: n8nWebhookHeaders(),
         body: JSON.stringify({
           event: 'module_completed',
           client_id: client.id,

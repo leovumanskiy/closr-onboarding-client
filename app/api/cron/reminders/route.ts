@@ -4,6 +4,7 @@ import { sendEmail } from '@/lib/email/resend'
 import { stepReminderEmail } from '@/lib/email/templates'
 import { createNotification } from '@/lib/notifications/create'
 import { isAuthorizedCron } from '@/lib/auth/cron'
+import { n8nWebhookHeaders } from '@/lib/integrations/n8n'
 
 const APP_URL = process.env.NEXT_PUBLIC_APP_URL ?? 'http://localhost:3000'
 
@@ -110,7 +111,7 @@ export async function GET(request: NextRequest) {
       if (process.env.N8N_WEBHOOK_APPROACHING) {
         fetch(process.env.N8N_WEBHOOK_APPROACHING, {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: n8nWebhookHeaders(),
           body: JSON.stringify({
             event: 'approaching',
             client_id: clientId,
@@ -147,7 +148,7 @@ export async function GET(request: NextRequest) {
         const stepNode = mostOverdueStep?.steps as any
         fetch(process.env.N8N_WEBHOOK_OVERDUE, {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: n8nWebhookHeaders(),
           body: JSON.stringify({
             event: 'overdue',
             client_id: clientId,

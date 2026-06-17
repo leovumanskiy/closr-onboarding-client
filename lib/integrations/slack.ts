@@ -1,4 +1,5 @@
 import 'server-only'
+import { n8nWebhookHeaders } from './n8n'
 
 export type SlackDMResult =
   | { ok: true; channel?: string; ts?: string; raw?: unknown }
@@ -37,7 +38,7 @@ export async function sendWelcomeSlackDM(params: {
   try {
     const res = await fetch(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: n8nWebhookHeaders(),
       body: JSON.stringify({
         event: 'welcome',
         client_id: params.clientId,
