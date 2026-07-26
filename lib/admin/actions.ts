@@ -396,6 +396,18 @@ export async function reorderModules({ orderedIds }: { orderedIds: string[] }) {
   const failed = results.find(r => r.error)
   if (failed?.error) return { error: failed.error.message }
 
+  // Moving a module earlier can make it the immediate "next" module for clients who'd
+  // already completed everything ahead of its new position. Re-run the unlock check for
+  // everyone so those clients don't stay stuck behind a module that just moved in front of them.
+  const { data: allClients } = await service.from('clients').select('id')
+  if (allClients?.length) {
+    await Promise.all(
+      (allClients as any[]).map((client) =>
+        service.rpc('unlock_next_steps', { p_client_id: client.id } as any)
+      )
+    )
+  }
+
   revalidatePath('/admin/modules')
   return { success: true }
 }
@@ -488,6 +500,20 @@ export async function createStep({
     await service
       .from('client_progress')
       .upsert(backfillRows as any, { onConflict: 'client_id,step_id', ignoreDuplicates: true })
+
+    // If this is the first step of a brand-new module, the backfill above always inserts
+    // it 'locked' (there are no siblings to check completion against). Clients who had
+    // already finished every prior module are then stuck forever: unlock_next_steps only
+    // runs from markStepComplete, which never fires again for a client with nothing left
+    // to complete. Run it once now so already-finished clients unlock straight into the
+    // new module instead of waiting on a step-completion event that will never happen.
+    if (!siblingIds.length) {
+      await Promise.all(
+        (allClients as any[]).map((client) =>
+          service.rpc('unlock_next_steps', { p_client_id: client.id } as any)
+        )
+      )
+    }
   }
 
   await service.from('audit_log').insert({

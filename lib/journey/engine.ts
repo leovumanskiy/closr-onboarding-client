@@ -53,6 +53,12 @@ export async function getJourneyState(clientId: string): Promise<JourneyState> {
     // this is a server-controlled idempotent fix, not user input.
     const service = createServiceClient()
     await service.from('client_progress').upsert(missingRows as any, { onConflict: 'client_id,step_id', ignoreDuplicates: true })
+
+    // A step with zero sibling rows (brand-new module, none of its steps seen before)
+    // always lands here as 'locked', even for a client who already finished every
+    // earlier module. Nothing else re-evaluates that client afterwards, so ask the DB's
+    // next-module unlock rule to fix it up now instead of leaving them stuck.
+    await service.rpc('unlock_next_steps', { p_client_id: clientId } as any)
   }
 
   let totalSteps = 0
