@@ -3,10 +3,13 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
 import { updateClientDetails, updateClientPassword } from '@/lib/admin/actions'
-import { Save, KeyRound, Loader2, Eye, EyeOff } from 'lucide-react'
+import { setClientProgram } from '@/lib/admin/programActions'
+import { Save, KeyRound, Loader2, Eye, EyeOff, GitBranch } from 'lucide-react'
 
 interface Props {
   clientId: string
+  programs?: { id: string; name: string; is_default: boolean }[]
+  currentProgramId?: string | null
   initial: {
     businessName: string
     fullName: string
@@ -22,13 +25,29 @@ interface Props {
 
 const statusOptions = ['active', 'paused', 'completed', 'churned'] as const
 
-export function ClientEditPanel({ clientId, initial }: Props) {
+export function ClientEditPanel({ clientId, initial, programs = [], currentProgramId = null }: Props) {
   const [details, setDetails] = useState(initial)
   const [savingDetails, setSavingDetails] = useState(false)
 
   const [newPassword, setNewPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
+
+  // Program is saved separately from the rest of the form: changing it re-seeds
+  // the client's progress, so it shouldn't ride along with a name edit.
+  const [savedProgramId, setSavedProgramId] = useState(currentProgramId ?? '')
+  const [programId, setProgramId] = useState(currentProgramId ?? '')
+  const [savingProgram, setSavingProgram] = useState(false)
+  const programChanged = programId !== savedProgramId
+
+  async function handleSaveProgram() {
+    setSavingProgram(true)
+    const result = await setClientProgram({ clientId, programId })
+    setSavingProgram(false)
+    if (result.error) { toast.error(result.error); return }
+    setSavedProgramId(programId)
+    toast.success('Program updated. The client\'s journey has been re-seeded.')
+  }
 
   function setField(field: keyof typeof details, value: string) {
     setDetails(d => ({ ...d, [field]: value }))
@@ -141,6 +160,44 @@ export function ClientEditPanel({ clientId, initial }: Props) {
               ))}
             </select>
           </div>
+          {programs.length > 0 && (
+            <div>
+              <label className="block text-xs font-medium text-muted-foreground mb-1">
+                <GitBranch className="inline h-3 w-3 mr-1 -mt-0.5" />
+                Program
+              </label>
+              <div className="flex gap-2">
+                <select
+                  value={programId}
+                  onChange={e => setProgramId(e.target.value)}
+                  className={inputCls}
+                >
+                  {!savedProgramId && <option value="">— unassigned —</option>}
+                  {programs.map(p => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}{p.is_default ? ' (default)' : ''}
+                    </option>
+                  ))}
+                </select>
+                {programChanged && programId && (
+                  <button
+                    type="button"
+                    onClick={handleSaveProgram}
+                    disabled={savingProgram}
+                    className="shrink-0 rounded-md bg-primary px-3 text-xs font-medium text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
+                  >
+                    {savingProgram ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : 'Move'}
+                  </button>
+                )}
+              </div>
+              {programChanged && programId && (
+                <p className="text-[11px] text-amber-600 dark:text-amber-400 mt-1">
+                  Changes which modules this client sees. Completed steps on shared modules are kept.
+                </p>
+              )}
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-medium text-muted-foreground mb-1">Slack Channel ID</label>
             <input

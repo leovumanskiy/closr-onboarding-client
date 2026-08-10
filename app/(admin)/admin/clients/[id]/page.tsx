@@ -26,12 +26,18 @@ export default async function AdminClientDetailPage({ params }: Props) {
 
   const { data: clientRaw } = await supabase
     .from('clients')
-    .select('id, business_name, full_name, email, business_website, niche, start_date, status, created_at, notes, image_url, slack_channel_id, slack_user_id')
+    .select('id, business_name, full_name, email, business_website, niche, start_date, status, created_at, notes, image_url, slack_channel_id, slack_user_id, program_id')
     .eq('id', id)
     .single()
   const client = clientRaw as any
 
   if (!client) notFound()
+
+  const { data: programsRaw } = await supabase
+    .from('programs')
+    .select('id, name, is_default')
+    .order('name')
+  const programs = (programsRaw ?? []) as any[]
 
   const avatarUrl: string | null = client.image_url ?? null
 
@@ -133,6 +139,8 @@ export default async function AdminClientDetailPage({ params }: Props) {
         <h2 className="text-base font-semibold mb-4">Edit Client</h2>
         <ClientEditPanel
           clientId={id}
+          programs={programs}
+          currentProgramId={client.program_id ?? null}
           initial={{
             businessName: client.business_name ?? '',
             fullName: client.full_name ?? '',
@@ -165,7 +173,7 @@ export default async function AdminClientDetailPage({ params }: Props) {
                       isDone ? 'bg-emerald-500/10 border border-emerald-500/20' : 'bg-primary/10 border border-primary/20'
                     )}>
                       <span className={cn('text-[10px] font-bold', isDone ? 'text-emerald-400' : 'text-primary')}>
-                        {mod.order_index}
+                        {mod.programOrderIndex}
                       </span>
                     </div>
                     <div>

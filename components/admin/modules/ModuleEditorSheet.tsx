@@ -6,6 +6,7 @@ import * as Dialog from '@radix-ui/react-dialog'
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, DragEndEvent } from '@dnd-kit/core'
 import { SortableContext, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable'
 import { updateModule, deleteModule, createStep, reorderSteps } from '@/lib/admin/actions'
+import { setModulePrograms } from '@/lib/admin/programActions'
 import { StepRow } from './StepRow'
 import { StepEditorSheet } from './StepEditorSheet'
 import { DeleteConfirmDialog } from './DeleteConfirmDialog'
@@ -17,13 +18,16 @@ interface Props {
   open: boolean
   onOpenChange: (open: boolean) => void
   module: any
+  programs: { id: string; name: string }[]
   onModuleUpdated: (patch: Partial<any>) => void
+  /** Patches the parent list without closing the sheet. */
+  onProgramsChanged: (patch: Partial<any>) => void
   onModuleDeleted: () => void
 }
 
 const inputClass = 'w-full rounded-lg border border-input bg-background px-3 py-2.5 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring'
 
-export function ModuleEditorSheet({ open, onOpenChange, module, onModuleUpdated, onModuleDeleted }: Props) {
+export function ModuleEditorSheet({ open, onOpenChange, module, programs, onModuleUpdated, onProgramsChanged, onModuleDeleted }: Props) {
   const sorted = [...(module.steps ?? [])].sort((a: any, b: any) => a.order_index - b.order_index)
 
   const [title, setTitle] = useState(module.title)
@@ -40,8 +44,40 @@ export function ModuleEditorSheet({ open, onOpenChange, module, onModuleUpdated,
   const [activeStep, setActiveStep] = useState<any | null>(null)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
+  const [programIds, setProgramIds] = useState<string[]>(
+    (module.module_programs ?? []).map((l: any) => l.program_id)
+  )
+  const [savingPrograms, setSavingPrograms] = useState(false)
 
   const sensors = useSensors(useSensor(PointerSensor))
+
+  async function toggleProgram(id: string) {
+    const next = programIds.includes(id)
+      ? programIds.filter(p => p !== id)
+      : [...programIds, id]
+
+    const previous = programIds
+    setProgramIds(next)
+    setSavingPrograms(true)
+    const res = await setModulePrograms({ moduleId: module.id, programIds: next })
+    setSavingPrograms(false)
+
+    if (res.error) {
+      toast.error(res.error)
+      setProgramIds(previous)
+      return
+    }
+
+    // Keep the parent list in sync so the program tabs and counts update without
+    // a refetch. Order for a newly-added program is appended server-side; the
+    // exact value only matters after a reload, so 0 is a safe placeholder.
+    const existing = module.module_programs ?? []
+    onProgramsChanged({
+      module_programs: next.map(pid =>
+        existing.find((l: any) => l.program_id === pid) ?? { program_id: pid, order_index: 0 }
+      ),
+    })
+  }
 
   function handleTitleChange(val: string) {
     setTitle(val)
@@ -148,6 +184,42 @@ export function ModuleEditorSheet({ open, onOpenChange, module, onModuleUpdated,
                   rows={2}
                   className={cn(inputClass, 'resize-none')}
                 />
+              </div>
+
+              {/* Programs */}
+              <div className="space-y-1.5">
+                <label className="block text-sm font-medium">
+                  Programs
+                  {savingPrograms && <span className="ml-2 text-xs font-normal text-muted-foreground">saving…</span>}
+                </label>
+                <p className="text-xs text-muted-foreground">
+                  Which cohorts see this module. Changes apply immediately.
+                </p>
+                <div className="flex flex-wrap gap-2 pt-1">
+                  {programs.map(p => {
+                    const on = programIds.includes(p.id)
+                    return (
+                      <button
+                        key={p.id}
+                        onClick={() => toggleProgram(p.id)}
+                        disabled={savingPrograms}
+                        className={cn(
+                          'rounded-lg border px-3 py-1.5 text-xs font-medium transition-colors disabled:opacity-50',
+                          on
+                            ? 'border-primary bg-primary/10 text-primary'
+                            : 'border-input text-muted-foreground hover:bg-muted hover:text-foreground'
+                        )}
+                      >
+                        {p.name}
+                      </button>
+                    )
+                  })}
+                </div>
+                {programIds.length === 0 && (
+                  <p className="text-xs text-amber-600 dark:text-amber-400 pt-1">
+                    Not in any program — no client can see this module.
+                  </p>
+                )}
               </div>
 
               {/* Advanced toggle */}

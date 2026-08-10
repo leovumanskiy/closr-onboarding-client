@@ -42,7 +42,7 @@ export function ModuleCard({ module: mod, isCurrent }: ModuleCardProps) {
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 mb-2.5 flex-wrap">
             <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-[0.18em]">
-              Module {mod.order_index}
+              Module {mod.programOrderIndex}
             </span>
 
             {/* Status badge */}

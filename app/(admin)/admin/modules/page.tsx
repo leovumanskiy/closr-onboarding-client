@@ -6,11 +6,18 @@ export default async function AdminModulesPage() {
   await requireAdmin()
   const supabase = createServiceClient()
 
-  const { data: modulesRaw } = await supabase
-    .from('modules')
-    .select('*, steps(*)')
-    .order('order_index')
+  const [{ data: modulesRaw }, { data: programsRaw }] = await Promise.all([
+    supabase
+      .from('modules')
+      .select('*, steps(*), module_programs(program_id, order_index)')
+      .order('order_index'),
+    supabase
+      .from('programs')
+      .select('id, slug, name, is_default')
+      .order('name'),
+  ])
   const modules = (modulesRaw ?? []) as any[]
+  const programs = (programsRaw ?? []) as any[]
 
   return (
     <div className="p-6 md:p-8 max-w-5xl mx-auto space-y-6">
@@ -32,7 +39,7 @@ export default async function AdminModulesPage() {
         </div>
       </div>
 
-      <ModulesEditor initialModules={modules} />
+      <ModulesEditor initialModules={modules} programs={programs} />
     </div>
   )
 }

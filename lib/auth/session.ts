@@ -6,6 +6,8 @@ export interface SessionUser {
   email: string
   role: 'client' | 'admin'
   fullName: string | null
+  /** Cohort the client is assigned to. Null until the programs backfill runs. */
+  programId: string | null
 }
 
 // React `cache()` memoizes per request, so multiple getSession() calls in the
@@ -18,7 +20,7 @@ export const getSession = cache(async (): Promise<SessionUser | null> => {
 
   const { data: client } = await (supabase as any)
     .from('clients')
-    .select('id, email, role, full_name')
+    .select('id, email, role, full_name, program_id')
     .eq('user_id', user.id)
     .single()
 
@@ -29,5 +31,6 @@ export const getSession = cache(async (): Promise<SessionUser | null> => {
     email: client.email,
     role: client.role as 'client' | 'admin',
     fullName: client.full_name ?? null,
+    programId: client.program_id ?? null,
   }
 })

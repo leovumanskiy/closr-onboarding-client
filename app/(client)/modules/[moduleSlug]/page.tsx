@@ -40,9 +40,13 @@ export default async function ModulePage({ params }: Props) {
     ? journey.currentStep?.slug
     : undefined
 
-  // Find next module
+  // Find next module. journey.modules is already sorted by the client's program
+  // order, so step forward from this module rather than matching order_index + 1
+  // — program positions can have gaps, and the global order_index is not the
+  // order this client sees.
+  const modIndex = journey.modules.findIndex(m => m.id === mod.id)
   const nextModule = isModuleComplete
-    ? journey.modules.find(m => m.order_index === mod.order_index + 1 && m.progress !== 'locked')
+    ? journey.modules.slice(modIndex + 1).find(m => m.progress !== 'locked') ?? null
     : null
 
   return (
@@ -55,7 +59,7 @@ export default async function ModulePage({ params }: Props) {
         </Link>
         <div className="flex items-center gap-2 mb-1">
           <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-            Module {mod.order_index}
+            Module {mod.programOrderIndex}
           </span>
         </div>
         <h1 className="text-2xl font-bold">{mod.title}</h1>

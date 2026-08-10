@@ -6,11 +6,12 @@ import { NotificationBell } from '@/components/layout/NotificationBell'
 import { AdminSignOutButton } from '@/components/layout/AdminSignOutButton'
 import { Wordmark } from '@/components/brand/Wordmark'
 import { ThemeToggle } from '@/components/brand/ThemeToggle'
-import { Users, Layers } from 'lucide-react'
+import { Users, Layers, GitBranch } from 'lucide-react'
 
 const navItems = [
   { href: '/admin/clients', label: 'Clients', icon: Users },
   { href: '/admin/modules', label: 'Modules', icon: Layers },
+  { href: '/admin/programs', label: 'Programs', icon: GitBranch },
 ]
 
 export default async function AdminLayout({ children }: { children: React.ReactNode }) {

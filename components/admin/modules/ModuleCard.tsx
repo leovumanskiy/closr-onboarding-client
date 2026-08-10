@@ -7,15 +7,25 @@ import { CSS } from '@dnd-kit/utilities'
 import { deleteModule } from '@/lib/admin/actions'
 import { ModuleEditorSheet } from './ModuleEditorSheet'
 import { DeleteConfirmDialog } from './DeleteConfirmDialog'
-import { GripVertical, Layers, Pencil, Trash2 } from 'lucide-react'
+import { GripVertical, Layers, Pencil, Trash2, Minus, Share2 } from 'lucide-react'
 
 interface Props {
   module: any
+  programs: { id: string; name: string }[]
+  currentProgramId: string
   onDeleted: () => void
   onUpdated: (patch: Partial<any>) => void
+  onRemoveFromProgram: () => void
 }
 
-export function ModuleCard({ module, onDeleted, onUpdated }: Props) {
+export function ModuleCard({
+  module,
+  programs,
+  currentProgramId,
+  onDeleted,
+  onUpdated,
+  onRemoveFromProgram,
+}: Props) {
   const [sheetOpen, setSheetOpen] = useState(false)
   const [deleteOpen, setDeleteOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
@@ -24,6 +34,10 @@ export function ModuleCard({ module, onDeleted, onUpdated }: Props) {
   const style = { transform: CSS.Transform.toString(transform), transition }
 
   const stepCount = (module.steps ?? []).length
+  const otherPrograms = (module.module_programs ?? [])
+    .filter((l: any) => l.program_id !== currentProgramId)
+    .map((l: any) => programs.find(p => p.id === l.program_id)?.name)
+    .filter(Boolean) as string[]
 
   async function handleDelete() {
     setDeleting(true)
@@ -60,6 +74,15 @@ export function ModuleCard({ module, onDeleted, onUpdated }: Props) {
           )}
         </div>
 
+        {otherPrograms.length > 0 && (
+          <span
+            className="shrink-0 inline-flex items-center gap-1 rounded-full bg-amber-500/10 border border-amber-500/20 px-2.5 py-0.5 text-xs text-amber-600 dark:text-amber-400"
+            title={`Also used by: ${otherPrograms.join(', ')}`}
+          >
+            <Share2 className="h-3 w-3" /> Shared
+          </span>
+        )}
+
         <span className="shrink-0 rounded-full bg-muted px-2.5 py-0.5 text-xs text-muted-foreground">
           {stepCount} {stepCount === 1 ? 'step' : 'steps'}
         </span>
@@ -73,9 +96,17 @@ export function ModuleCard({ module, onDeleted, onUpdated }: Props) {
         </button>
 
         <button
+          onClick={onRemoveFromProgram}
+          className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"
+          title="Remove from this program (keeps the module and its other programs)"
+        >
+          <Minus className="h-4 w-4" />
+        </button>
+
+        <button
           onClick={() => setDeleteOpen(true)}
           className="shrink-0 rounded-md p-1.5 text-muted-foreground hover:bg-destructive/10 hover:text-destructive"
-          title="Delete module"
+          title="Delete module everywhere"
         >
           <Trash2 className="h-4 w-4" />
         </button>
@@ -85,7 +116,9 @@ export function ModuleCard({ module, onDeleted, onUpdated }: Props) {
         open={sheetOpen}
         onOpenChange={setSheetOpen}
         module={module}
+        programs={programs}
         onModuleUpdated={patch => { onUpdated(patch); setSheetOpen(false) }}
+        onProgramsChanged={patch => onUpdated(patch)}
         onModuleDeleted={() => { setSheetOpen(false); onDeleted() }}
       />
 
@@ -93,7 +126,11 @@ export function ModuleCard({ module, onDeleted, onUpdated }: Props) {
         open={deleteOpen}
         onOpenChange={setDeleteOpen}
         title="Delete Module"
-        description={`This will permanently delete "${module.title}" and all ${stepCount} step${stepCount === 1 ? '' : 's'}.`}
+        description={
+          otherPrograms.length > 0
+            ? `"${module.title}" is also used by ${otherPrograms.join(', ')}. Deleting removes it and all ${stepCount} step${stepCount === 1 ? '' : 's'} from every program. To take it out of this program only, use the − button instead.`
+            : `This will permanently delete "${module.title}" and all ${stepCount} step${stepCount === 1 ? '' : 's'}.`
+        }
         onConfirm={handleDelete}
         loading={deleting}
       />

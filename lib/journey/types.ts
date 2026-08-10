@@ -4,11 +4,16 @@ export type Module = Database['public']['Tables']['modules']['Row']
 export type Step = Database['public']['Tables']['steps']['Row']
 export type ClientProgress = Database['public']['Tables']['client_progress']['Row']
 export type Client = Database['public']['Tables']['clients']['Row']
+export type Program = Database['public']['Tables']['programs']['Row']
+export type ModuleProgram = Database['public']['Tables']['module_programs']['Row']
 
 export interface ModuleWithSteps extends Module {
   steps: StepWithProgress[]
   progress: 'locked' | 'in_progress' | 'completed'
   completedCount: number
+  // Position within the client's program. Modules are shared across programs, so
+  // this can differ from Module.order_index (which is only the legacy global order).
+  programOrderIndex: number
 }
 
 export interface StepWithProgress extends Step {

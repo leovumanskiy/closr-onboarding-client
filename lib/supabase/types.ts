@@ -24,6 +24,8 @@ export interface Database {
       clients: {
         Row: {
           id: string
+          user_id: string | null
+          program_id: string | null
           email: string
           full_name: string | null
           business_name: string
@@ -49,6 +51,8 @@ export interface Database {
         }
         Insert: {
           id?: string
+          user_id?: string | null
+          program_id?: string | null
           email: string
           full_name?: string | null
           business_name: string
@@ -73,6 +77,8 @@ export interface Database {
           updated_at?: string
         }
         Update: {
+          user_id?: string | null
+          program_id?: string | null
           email?: string
           full_name?: string | null
           business_name?: string
@@ -94,6 +100,51 @@ export interface Database {
           slack_channel_id?: string | null
           slack_user_id?: string | null
           updated_at?: string
+        }
+      }
+      programs: {
+        Row: {
+          id: string
+          slug: string
+          name: string
+          description: string | null
+          is_default: boolean
+          is_active: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          slug: string
+          name: string
+          description?: string | null
+          is_default?: boolean
+          is_active?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          slug?: string
+          name?: string
+          description?: string | null
+          is_default?: boolean
+          is_active?: boolean
+          updated_at?: string
+        }
+      }
+      module_programs: {
+        Row: {
+          module_id: string
+          program_id: string
+          order_index: number
+        }
+        Insert: {
+          module_id: string
+          program_id: string
+          order_index: number
+        }
+        Update: {
+          order_index?: number
         }
       }
       modules: {

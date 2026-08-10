@@ -7,10 +7,19 @@ import { createClientUser } from '@/lib/admin/actions'
 import { UserPlus, X } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
-export function NewClientForm() {
+interface Program {
+  id: string
+  name: string
+  is_default: boolean
+}
+
+export function NewClientForm({ programs = [] }: { programs?: Program[] }) {
   const router = useRouter()
   const [open, setOpen] = useState(false)
   const [loading, setLoading] = useState(false)
+  const [programId, setProgramId] = useState<string>(
+    programs.find(p => p.is_default)?.id ?? programs[0]?.id ?? ''
+  )
   const [form, setForm] = useState({ email: '', password: '', businessName: '', fullName: '', slackChannelId: '', slackUserId: '' })
 
   function set(field: string, value: string) {
@@ -31,6 +40,7 @@ export function NewClientForm() {
       fullName: form.fullName || undefined,
       slackChannelId: form.slackChannelId || undefined,
       slackUserId: form.slackUserId || undefined,
+      programId: programId || undefined,
     })
     setLoading(false)
     if (result.error) {
@@ -65,6 +75,26 @@ export function NewClientForm() {
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
+              {programs.length > 0 && (
+                <div>
+                  <label className="text-sm font-medium block mb-1">Program *</label>
+                  <select
+                    value={programId}
+                    onChange={e => setProgramId(e.target.value)}
+                    className="w-full rounded-md border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary"
+                  >
+                    {programs.map(p => (
+                      <option key={p.id} value={p.id}>
+                        {p.name}{p.is_default ? ' (default)' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Determines which modules this client sees. Their journey is seeded from it on creation.
+                  </p>
+                </div>
+              )}
+
               <div>
                 <label className="text-sm font-medium block mb-1">Business Name *</label>
                 <input

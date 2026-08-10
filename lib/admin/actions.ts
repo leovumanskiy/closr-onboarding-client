@@ -13,6 +13,7 @@ export async function createClientUser({
   fullName,
   slackChannelId,
   slackUserId,
+  programId,
 }: {
   email: string
   password: string
@@ -20,6 +21,7 @@ export async function createClientUser({
   fullName?: string
   slackChannelId?: string
   slackUserId?: string
+  programId?: string
 }) {
   const session = await requireAdmin()
   const service = createServiceClient()
@@ -37,6 +39,20 @@ export async function createClientUser({
     return { error: authErr?.message ?? 'Failed to create auth user.' }
   }
 
+  // Resolve the program up front: initClientJourney seeds progress from the
+  // program's module list, so program_id must be set on the row BEFORE it runs.
+  // Falls back to the default program when the form didn't specify one.
+  let resolvedProgramId = programId ?? null
+  if (!resolvedProgramId) {
+    const { data: def } = await service
+      .from('programs')
+      .select('id')
+      .eq('is_default', true)
+      .limit(1)
+      .maybeSingle()
+    resolvedProgramId = ((def as any)?.id as string | undefined) ?? null
+  }
+
   const { data: newClient, error } = await service.from('clients').insert({
     email: normEmail,
     user_id: authData.user.id,
@@ -46,6 +62,7 @@ export async function createClientUser({
     must_change_password: true,
     slack_channel_id: slackChannelId ?? null,
     slack_user_id: slackUserId ?? null,
+    program_id: resolvedProgramId,
   } as any).select('id').single()
 
   if (error) {
@@ -61,7 +78,7 @@ export async function createClientUser({
     action: 'admin_create_client',
     subject_table: 'clients',
     subject_id: clientId,
-    meta: { email, business_name: businessName },
+    meta: { email, business_name: businessName, program_id: resolvedProgramId },
   } as any)
 
   revalidatePath('/admin/clients')
@@ -296,10 +313,13 @@ export async function createModule({
   title,
   description,
   slug,
+  programId,
 }: {
   title: string
   description: string
   slug: string
+  /** Program to add the new module to. Omit to leave it unassigned. */
+  programId?: string
 }) {
   const session = await requireAdmin()
   const service = createServiceClient()
@@ -317,16 +337,36 @@ export async function createModule({
 
   if (error) return { error: error.message }
 
+  const moduleId = (data as any).id
+
+  // A module nobody's program contains is invisible to every client, so append
+  // it to the program the admin is currently editing.
+  if (programId) {
+    const { data: last } = await service
+      .from('module_programs')
+      .select('order_index')
+      .eq('program_id', programId)
+      .order('order_index', { ascending: false })
+      .limit(1)
+      .maybeSingle()
+
+    await service.from('module_programs').insert({
+      module_id: moduleId,
+      program_id: programId,
+      order_index: ((last as any)?.order_index ?? 0) + 1,
+    } as any)
+  }
+
   await service.from('audit_log').insert({
     actor_id: session.id,
     action: 'admin_create_module',
     subject_table: 'modules',
-    subject_id: (data as any).id,
-    meta: { title },
+    subject_id: moduleId,
+    meta: { title, program_id: programId ?? null },
   } as any)
 
   revalidatePath('/admin/modules')
-  return { success: true, id: (data as any).id }
+  return { success: true, id: moduleId }
 }
 
 export async function updateModule({

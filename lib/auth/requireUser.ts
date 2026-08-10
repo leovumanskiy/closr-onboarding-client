@@ -29,7 +29,7 @@ export async function getClient() {
     .from('clients')
     .select(
       'id, user_id, email, role, full_name, business_name, business_website,' +
-      'niche, has_ghl, has_fb_ads, status, current_module_id, start_date,' +
+      'niche, has_ghl, has_fb_ads, status, current_module_id, program_id, start_date,' +
       'image_url, slack_channel_id, slack_user_id, must_change_password,' +
       'created_at, updated_at, ghl_location_id, ghl_token_expires_at'
     )

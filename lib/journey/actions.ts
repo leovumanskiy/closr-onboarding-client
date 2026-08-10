@@ -5,6 +5,7 @@ import { createServiceClient } from '@/lib/supabase/service'
 import { requireUser } from '@/lib/auth/requireUser'
 import { createNotification } from '@/lib/notifications/create'
 import { n8nWebhookHeaders } from '@/lib/integrations/n8n'
+import { resolveProgramId } from '@/lib/journey/engine'
 
 export async function markStepComplete(stepId: string) {
   const session = await requireUser()
@@ -97,15 +98,29 @@ export async function markStepComplete(stepId: string) {
 
   let nextModuleSlug: string | null = null
   let nextModuleTitle: string | null = null
+  let moduleOrder: number | null = null
   if (moduleComplete) {
-    const { data: nextModRaw } = await service
-      .from('modules')
-      .select('id, slug, title')
-      .gt('order_index', mod?.order_index ?? 0)
+    // "Next module" is the next one in THIS client's program, not the next by
+    // global order_index — those diverge as soon as a second program exists.
+    const programId = await resolveProgramId(client.id, service as any)
+
+    const { data: currentLinkRaw } = await service
+      .from('module_programs')
+      .select('order_index')
+      .eq('program_id', programId)
+      .eq('module_id', step.module_id)
+      .maybeSingle()
+    moduleOrder = (currentLinkRaw as any)?.order_index ?? null
+
+    const { data: nextLinkRaw } = await service
+      .from('module_programs')
+      .select('order_index, modules!inner(id, slug, title)')
+      .eq('program_id', programId)
+      .gt('order_index', moduleOrder ?? 0)
       .order('order_index')
       .limit(1)
-      .single()
-    const nextMod = nextModRaw as any
+      .maybeSingle()
+    const nextMod = (nextLinkRaw as any)?.modules ?? null
     nextModuleSlug = nextMod?.slug ?? null
     nextModuleTitle = nextMod?.title ?? null
 
@@ -138,7 +153,7 @@ export async function markStepComplete(stepId: string) {
           slack_user_id: client.slack_user_id,
           module_slug: mod?.slug,
           module_title: mod?.title,
-          module_order: mod?.order_index,
+          module_order: moduleOrder ?? mod?.order_index,
           next_module_title: nextModuleTitle,
         }),
       }).catch(e => console.error('[n8n] module-complete hook failed', e))

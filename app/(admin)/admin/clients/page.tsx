@@ -12,10 +12,17 @@ export default async function AdminClientsPage() {
 
   const { data: clientsRaw } = await supabase
     .from('clients')
-    .select('id, business_name, full_name, email, status, created_at')
+    .select('id, business_name, full_name, email, status, created_at, program_id')
     .eq('role', 'client')
     .order('created_at', { ascending: false })
   const clients = (clientsRaw ?? []) as any[]
+
+  const { data: programsRaw } = await supabase
+    .from('programs')
+    .select('id, name, is_default')
+    .order('name')
+  const programs = (programsRaw ?? []) as any[]
+  const programById = new Map(programs.map(p => [p.id, p]))
 
   const { data: progressRaw } = await supabase
     .from('client_progress')
@@ -67,7 +74,7 @@ export default async function AdminClientsPage() {
             {clients.length} client{clients.length !== 1 ? 's' : ''} enrolled
           </p>
         </div>
-        <NewClientForm />
+        <NewClientForm programs={programs} />
       </div>
 
       {clients.length === 0 ? (
@@ -82,6 +89,7 @@ export default async function AdminClientsPage() {
             <thead>
               <tr className="border-b bg-muted/30">
                 <th className="text-left px-5 py-3 font-medium text-muted-foreground text-xs uppercase tracking-wide">Company</th>
+                <th className="text-left px-5 py-3 font-medium text-muted-foreground text-xs uppercase tracking-wide">Program</th>
                 <th className="text-left px-5 py-3 font-medium text-muted-foreground text-xs uppercase tracking-wide">Progress</th>
                 <th className="text-left px-5 py-3 font-medium text-muted-foreground text-xs uppercase tracking-wide">Current Step</th>
                 <th className="text-left px-5 py-3 font-medium text-muted-foreground text-xs uppercase tracking-wide">Time in Step</th>
@@ -104,6 +112,24 @@ export default async function AdminClientsPage() {
                         <p className="font-medium group-hover:text-primary transition-colors">{c.business_name}</p>
                         <p className="text-xs text-muted-foreground">{c.full_name ?? c.email}</p>
                       </Link>
+                    </td>
+                    <td className="px-5 py-3.5">
+                      {(() => {
+                        const prog = c.program_id ? programById.get(c.program_id) : null
+                        if (prog) {
+                          return (
+                            <span className="text-xs bg-muted px-2 py-0.5 rounded-full">{prog.name}</span>
+                          )
+                        }
+                        return (
+                          <span
+                            className="text-xs text-amber-600 dark:text-amber-400"
+                            title="No program assigned — falls back to the default program"
+                          >
+                            unassigned
+                          </span>
+                        )
+                      })()}
                     </td>
                     <td className="px-5 py-3.5">
                       <div className="flex items-center gap-2 min-w-[100px]">
