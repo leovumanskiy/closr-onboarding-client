@@ -24,45 +24,71 @@ export default async function AdminClientsPage() {
   const programs = (programsRaw ?? []) as any[]
   const programById = new Map(programs.map(p => [p.id, p]))
 
-  const { data: progressRaw } = await supabase
-    .from('client_progress')
-    .select('client_id, status, started_at, due_at, steps!inner(title, slug, order_index, modules!inner(slug))')
-    .in('status', ['available', 'in_progress'])
-  const progressData = (progressRaw ?? []) as any[]
+  // Every aggregate below must be scoped to each client's program, or it counts
+  // steps the client cannot see. That matters after a client is moved between
+  // programs: their old program's client_progress rows are kept deliberately
+  // (so shared-module completions survive a move back) but must not be counted.
+  const [{ data: linksRaw }, { data: stepsRaw }, { data: allProgressRaw }] = await Promise.all([
+    supabase.from('module_programs').select('module_id, program_id, order_index'),
+    supabase.from('steps').select('id, module_id, title, slug, order_index'),
+    supabase.from('client_progress').select('client_id, step_id, status, started_at, due_at'),
+  ])
 
-  const currentStepMap = new Map<string, any>()
-  for (const p of progressData) {
-    const existing = currentStepMap.get(p.client_id)
-    if (!existing || p.steps?.order_index < existing.steps?.order_index) {
-      currentStepMap.set(p.client_id, p)
-    }
-  }
-
-  const { data: allProgressRaw } = await supabase
-    .from('client_progress')
-    .select('client_id, due_at, status')
-    .not('due_at', 'is', null)
-    .in('status', ['available', 'in_progress'])
+  const links = (linksRaw ?? []) as any[]
+  const allSteps = (stepsRaw ?? []) as any[]
   const allProgress = (allProgressRaw ?? []) as any[]
 
+  const stepById = new Map(allSteps.map(s => [s.id, s]))
+  const defaultProgramId = programs.find(p => p.is_default)?.id ?? null
+
+  // program_id -> (module_id -> position within that program)
+  const moduleOrderByProgram = new Map<string, Map<string, number>>()
+  for (const l of links) {
+    if (!moduleOrderByProgram.has(l.program_id)) moduleOrderByProgram.set(l.program_id, new Map())
+    moduleOrderByProgram.get(l.program_id)!.set(l.module_id, l.order_index)
+  }
+
+  const currentStepMap = new Map<string, any>()
   const overdueMap = new Map<string, number>()
+  const progressByClient = new Map<string, { total: number; completed: number }>()
   const now = new Date()
+
+  const clientProgramId = new Map<string, string | null>(
+    clients.map(c => [c.id, c.program_id ?? defaultProgramId])
+  )
+
   for (const p of allProgress) {
+    const programId = clientProgramId.get(p.client_id)
+    if (!programId) continue
+
+    const step = stepById.get(p.step_id)
+    if (!step) continue
+
+    const moduleOrder = moduleOrderByProgram.get(programId)?.get(step.module_id)
+    if (moduleOrder === undefined) continue // step's module isn't in this client's program
+
+    const counts = progressByClient.get(p.client_id) ?? { total: 0, completed: 0 }
+    counts.total++
+    if (p.status === 'completed') counts.completed++
+    progressByClient.set(p.client_id, counts)
+
+    if (p.status !== 'available' && p.status !== 'in_progress') continue
+
     if (p.due_at && new Date(p.due_at) < now) {
       overdueMap.set(p.client_id, (overdueMap.get(p.client_id) ?? 0) + 1)
     }
-  }
 
-  // Progress percentages per client
-  const { data: allProgressCounts } = await supabase
-    .from('client_progress')
-    .select('client_id, status')
-  const progressByClient = new Map<string, { total: number; completed: number }>()
-  for (const p of (allProgressCounts ?? []) as any[]) {
-    const cur = progressByClient.get(p.client_id) ?? { total: 0, completed: 0 }
-    cur.total++
-    if (p.status === 'completed') cur.completed++
-    progressByClient.set(p.client_id, cur)
+    // Earliest reachable step, by the client's program order then step order —
+    // the same ordering getJourneyState() uses to pick currentStep.
+    const candidate = { ...p, step, moduleOrder }
+    const existing = currentStepMap.get(p.client_id)
+    if (
+      !existing ||
+      candidate.moduleOrder < existing.moduleOrder ||
+      (candidate.moduleOrder === existing.moduleOrder && step.order_index < existing.step.order_index)
+    ) {
+      currentStepMap.set(p.client_id, candidate)
+    }
   }
 
   return (
@@ -99,7 +125,7 @@ export default async function AdminClientsPage() {
             <tbody className="divide-y divide-border">
               {clients.map(c => {
                 const progress = currentStepMap.get(c.id)
-                const step = progress?.steps as any
+                const step = progress?.step as any
                 const overdue = overdueMap.get(c.id) ?? 0
                 const isStuck = progress?.due_at && new Date(progress.due_at) < now
                 const counts = progressByClient.get(c.id) ?? { total: 0, completed: 0 }
