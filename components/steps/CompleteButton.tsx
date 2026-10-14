@@ -18,13 +18,18 @@ interface CompleteButtonProps {
 export function CompleteButton({ stepId, isCompleted, moduleSlug, label, disabled }: CompleteButtonProps) {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  // Show the step as done the moment it's clicked; the save carries on behind it and
+  // we put the button back if it fails.
+  const [optimisticDone, setOptimisticDone] = useState(false)
 
   async function handleComplete() {
     if (isCompleted || loading) return
     setLoading(true)
+    setOptimisticDone(true)
     const result = await markStepComplete(stepId)
     if (result.error) {
       toast.error(result.error)
+      setOptimisticDone(false)
       setLoading(false)
       return
     }
@@ -42,8 +47,18 @@ export function CompleteButton({ stepId, isCompleted, moduleSlug, label, disable
       router.push(`/modules/${moduleSlug}`)
     }
 
-    router.refresh()
+    // No router.refresh(): the action's revalidatePath already drops the cached pages,
+    // so the push above loads fresh data. A refresh here rendered the page a second time.
     setLoading(false)
+  }
+
+  if (optimisticDone && !isCompleted) {
+    return (
+      <div className="flex items-center gap-2 text-foreground/60 text-sm font-medium">
+        <CheckCircle2 className="h-4 w-4" />
+        Completed
+      </div>
+    )
   }
 
   if (isCompleted) {

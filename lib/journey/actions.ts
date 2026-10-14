@@ -11,28 +11,30 @@ export async function markStepComplete(stepId: string) {
   const session = await requireUser()
   const service = createServiceClient()
 
-  const { data: clientRaw } = await service
-    .from('clients')
-    .select('id, business_name, slack_channel_id, slack_user_id')
-    .eq('id', session.id)
-    .single()
+  // These three lookups don't depend on each other, so run them together rather than
+  // one after another: each is a round trip to the database.
+  const [{ data: clientRaw }, { data: stepRaw }, { data: progressRaw }] = await Promise.all([
+    service
+      .from('clients')
+      .select('id, business_name, slack_channel_id, slack_user_id, program_id')
+      .eq('id', session.id)
+      .single(),
+    service
+      .from('steps')
+      .select('id, title, slug, sla_hours, module_id, modules(id, title, slug, order_index)')
+      .eq('id', stepId)
+      .single(),
+    service
+      .from('client_progress')
+      .select('id, status')
+      .eq('client_id', session.id)
+      .eq('step_id', stepId)
+      .single(),
+  ])
   const client = clientRaw as any
   if (!client) return { error: 'Client not found' }
-
-  const { data: stepRaw } = await service
-    .from('steps')
-    .select('id, title, slug, sla_hours, module_id, modules(id, title, slug, order_index)')
-    .eq('id', stepId)
-    .single()
   const step = stepRaw as any
   if (!step) return { error: 'Step not found' }
-
-  const { data: progressRaw } = await service
-    .from('client_progress')
-    .select('id, status')
-    .eq('client_id', client.id)
-    .eq('step_id', stepId)
-    .single()
   const progress = progressRaw as any
 
   if (!progress) return { error: 'Progress record not found' }
@@ -41,13 +43,22 @@ export async function markStepComplete(stepId: string) {
 
   const now = new Date().toISOString()
 
-  await service
-    .from('client_progress')
-    .update({ status: 'completed', completed_at: now } as any)
-    .eq('client_id', client.id)
-    .eq('step_id', stepId)
+  // The module's step list doesn't depend on the save, so fetch it alongside.
+  const [, { data: siblingSteps }] = await Promise.all([
+    (async () => {
+      await service
+        .from('client_progress')
+        .update({ status: 'completed', completed_at: now } as any)
+        .eq('client_id', client.id)
+        .eq('step_id', stepId)
 
-  await service.rpc('unlock_next_steps', { p_client_id: client.id } as any)
+      await service.rpc('unlock_next_steps', { p_client_id: client.id } as any)
+    })(),
+    service
+      .from('steps')
+      .select('id')
+      .eq('module_id', step.module_id),
+  ])
 
   const mod = step.modules as any
 
@@ -81,10 +92,6 @@ export async function markStepComplete(stepId: string) {
   }
 
   // Check if the entire module is now complete
-  const { data: siblingSteps } = await service
-    .from('steps')
-    .select('id')
-    .eq('module_id', step.module_id)
   const siblingIds = (siblingSteps ?? []).map((s: any) => s.id)
 
   const { data: completedRows } = await service
@@ -102,7 +109,7 @@ export async function markStepComplete(stepId: string) {
   if (moduleComplete) {
     // "Next module" is the next one in THIS client's program, not the next by
     // global order_index — those diverge as soon as a second program exists.
-    const programId = await resolveProgramId(client.id, service as any)
+    const programId = client.program_id ?? (await resolveProgramId(client.id, service as any))
 
     const { data: currentLinkRaw } = await service
       .from('module_programs')
@@ -124,22 +131,23 @@ export async function markStepComplete(stepId: string) {
     nextModuleSlug = nextMod?.slug ?? null
     nextModuleTitle = nextMod?.title ?? null
 
-    if (nextMod?.id) {
-      await service
-        .from('clients')
-        .update({ current_module_id: nextMod.id } as any)
-        .eq('id', client.id)
-    }
-
-    await createNotification({
-      userId: session.id,
-      type: 'module_unlocked',
-      title: `Module complete: ${mod?.title}`,
-      body: nextModuleSlug
-        ? `You've unlocked the next module.`
-        : `You've completed the entire onboarding journey! 🎉`,
-      link: nextModuleSlug ? `/modules/${nextModuleSlug}` : '/dashboard',
-    })
+    await Promise.all([
+      nextMod?.id
+        ? service
+            .from('clients')
+            .update({ current_module_id: nextMod.id } as any)
+            .eq('id', client.id)
+        : null,
+      createNotification({
+        userId: session.id,
+        type: 'module_unlocked',
+        title: `Module complete: ${mod?.title}`,
+        body: nextModuleSlug
+          ? `You've unlocked the next module.`
+          : `You've completed the entire onboarding journey! 🎉`,
+        link: nextModuleSlug ? `/modules/${nextModuleSlug}` : '/dashboard',
+      }),
+    ])
 
     if (process.env.N8N_WEBHOOK_MODULE_COMPLETE) {
       fetch(process.env.N8N_WEBHOOK_MODULE_COMPLETE, {

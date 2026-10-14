@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { redirect } from 'next/navigation'
 import { getSession } from './session'
 import { createClient } from '@/lib/supabase/server'
@@ -15,7 +16,8 @@ export async function requireAdmin() {
   return session
 }
 
-export async function getClient() {
+// cache(): the client layout and each page both call this; one fetch per request.
+export const getClient = cache(async () => {
   const session = await getSession()
   if (!session) return null
 
@@ -37,7 +39,7 @@ export async function getClient() {
     .single()
 
   return data as any
-}
+})
 
 export async function getProfile() {
   return getSession()

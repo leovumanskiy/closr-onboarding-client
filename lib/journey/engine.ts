@@ -1,3 +1,4 @@
+import { cache } from 'react'
 import { createClient } from '@/lib/supabase/server'
 import { createServiceClient } from '@/lib/supabase/service'
 import type { JourneyState, ModuleWithSteps, StepWithProgress } from './types'
@@ -36,7 +37,9 @@ export async function resolveProgramId(
   return ((fallback as any)?.id as string | undefined) ?? null
 }
 
-export async function getJourneyState(clientId: string): Promise<JourneyState> {
+// cache(): the client layout and each page both call this for the same client; without
+// it every render loaded (and self-healed) the whole journey twice.
+export const getJourneyState = cache(async function getJourneyState(clientId: string): Promise<JourneyState> {
   // Reads run through the user-scoped client so RLS gates which client_progress
   // rows are visible (own row for clients, all rows for admins via is_admin()).
   const supabase = await createClient()
@@ -159,7 +162,7 @@ export async function getJourneyState(clientId: string): Promise<JourneyState> {
     completedSteps,
     percentComplete: totalSteps > 0 ? Math.round((completedSteps / totalSteps) * 100) : 0,
   }
-}
+})
 
 export async function initClientJourney(clientId: string) {
   const service = createServiceClient()
